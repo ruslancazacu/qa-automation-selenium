@@ -11,10 +11,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Instalează Chrome pe runner
+      # Instalează Google Chrome pe runner (setează automat CHROME_PATH)
       - uses: browser-actions/setup-chrome@v1
 
-      # (opțional) cache pentru pip – builduri mai rapide
+      # Cache pip pentru instalări mai rapide
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -23,9 +23,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - run: pip install -r requirements.txt
+      - name: Install deps
+        run: pip install -r requirements.txt
 
       - name: Run pytest (headless)
+        id: tests
         env:
           HEADLESS: "1"
         run: python -m pytest -q
+
+      # Încarcă artifacts (screenshots + page source) dacă au fost generate
+      - name: Upload UI test artifacts
+        if: always() && hashFiles('artifacts/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-artifacts
+          path: artifacts
