@@ -3,6 +3,12 @@
 
 Teste UI headless pe site-ul demo **SauceDemo** cu Page Object Model.
 
+## Stack
+- Selenium 4
+- PyTest 8
+- PyTest-xdist (rulare în paralel)
+- Allure (rapoarte)
+
 ## Run local (Windows)
 ```bash
 python -m venv .venv

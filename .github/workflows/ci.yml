@@ -4,7 +4,7 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: "0 3 * * *"   # rulează zilnic la 03:00 UTC
+    - cron: "0 3 * * *"   # daily health-check la 03:00 UTC
 
 jobs:
   ui-tests:
@@ -21,10 +21,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Instalează Chrome pe runner
+      # Chrome pe runner
       - uses: browser-actions/setup-chrome@v1
 
-      # Cache pentru pip – builduri mai rapide
+      # Cache pip
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -36,14 +36,59 @@ jobs:
       - name: Install deps
         run: pip install -r requirements.txt
 
+      # Rulează teste în paralel + colectează Allure
       - name: Run pytest (headless, parallel)
+        id: tests
         env:
           HEADLESS: "1"
-        run: python -m pytest -q -n auto --maxfail=1 --dist=worksteal
+        run: |
+          python -m pytest -q -n auto --maxfail=1 --dist worksteal --alluredir=allure-results
 
+      # Urcă artefactele funcționale (screenshots etc.)
       - name: Upload UI test artifacts
-        if: ${{ always() && hashFiles('artifacts/**') != '' }}
+        if: always() && hashFiles('artifacts/**') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ui-test-artifacts
           path: artifacts
+
+      # Urcă rezultatele brute Allure (pt. vizualizat sau publicat în alt job)
+      - name: Upload Allure results
+        if: always() && hashFiles('allure-results/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+
+  # (OPȚIONAL) Publică raportul Allure pe GitHub Pages
+  publish-allure:
+    needs: ui-tests
+    if: always() && github.ref == 'refs/heads/main'   # publică doar de pe main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Allure results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+
+      # Generează raportul Allure (fără să instalezi manual Allure/Java în job)
+      - name: Generate Allure report
+        uses: simple-elf/allure-report-action@v1.7
+        with:
+          allure_results: allure-results
+          allure_report: allure-report
+          keep_reports: 1
+
+      # Publică raportul în ramura gh-pages (vei avea URL de tipul:
+      # https://<user>.github.io/<repo>/ )
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-report
+          publish_branch: gh-pages
