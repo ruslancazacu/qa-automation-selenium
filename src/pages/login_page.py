@@ -1,35 +1,45 @@
-﻿from selenium.webdriver.common.by import By
+﻿# src/pages/login_page.py
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
 
 class LoginPage:
     URL = "https://www.saucedemo.com/"
 
+    # locatori
+    USERNAME = (By.ID, "user-name")
+    PASSWORD = (By.ID, "password")
+    SUBMIT   = (By.ID, "login-button")
+    ERROR    = (By.CSS_SELECTOR, "[data-test='error']")  # mesajul roșu
+    INVENTORY = (By.CSS_SELECTOR, ".inventory_list")     # după login reușit
+
     def __init__(self, driver):
         self.driver = driver
-        self.wait = WebDriverWait(driver, 10)
+        # crește timpul de așteptare ca să fim stabili local
+        self.wait = WebDriverWait(driver, 20)
 
     def open(self):
         self.driver.get(self.URL)
-        # login button prezent -> pagina încărcată
-        self.wait.until(EC.visibility_of_element_located((By.ID, "login-button")))
+        # câmpul user este vizibil = pagina e gata
+        self.wait.until(EC.visibility_of_element_located(self.USERNAME))
 
-    def login(self, username: str, password: str):
-        user = self.wait.until(EC.element_to_be_clickable((By.ID, "user-name")))
-        pwd  = self.wait.until(EC.element_to_be_clickable((By.ID, "password")))
-        btn  = self.wait.until(EC.element_to_be_clickable((By.ID, "login-button")))
+    def login(self, username, password):
+        self.driver.find_element(*self.USERNAME).clear()
+        self.driver.find_element(*self.USERNAME).send_keys(username)
+        self.driver.find_element(*self.PASSWORD).clear()
+        self.driver.find_element(*self.PASSWORD).send_keys(password)
+        self.driver.find_element(*self.SUBMIT).click()
 
-        user.clear(); user.send_keys(username)
-        pwd.clear();  pwd.send_keys(password)
-        btn.click()
-
-    def error_text(self, timeout: int = 6) -> str:
-        """Returnează textul de eroare de pe login (sau string gol dacă nu apare)."""
+    # helperi pentru aserții
+    def inventory_loaded(self):
+        """True când lista de produse e prezentă după login valid."""
         try:
-            el = WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, '[data-test="error"]'))
-            )
-            return el.text.strip()
-        except TimeoutException:
-            return ""
+            self.wait.until(EC.presence_of_element_located(self.INVENTORY))
+            return True
+        except Exception:
+            return False
+
+    def error_text(self):
+        """Textul complet al mesajului de eroare după login greșit."""
+        el = self.wait.until(EC.visibility_of_element_located(self.ERROR))
+        return el.text
