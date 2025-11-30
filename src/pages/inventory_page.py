@@ -1,33 +1,54 @@
-﻿# src/pages/inventory_page.py
-from selenium.webdriver.common.by import By
+﻿from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 class InventoryPage:
-    INVENTORY_CONTAINER = (By.ID, "inventory_container")
-    # produs simplu pentru test: „Sauce Labs Backpack”
-    ADD_BACKPACK_BTN   = (By.CSS_SELECTOR, '[data-test="add-to-cart-sauce-labs-backpack"]')
-    CART_BADGE         = (By.CLASS_NAME, "shopping_cart_badge")
-    CART_LINK          = (By.CLASS_NAME, "shopping_cart_link")
+    URL = "https://www.saucedemo.com/inventory.html"
+
+    INVENTORY_LIST = (By.CLASS_NAME, "inventory_list")
+    CART_BADGE = (By.CSS_SELECTOR, ".shopping_cart_badge")
+
+    ADD_BACKPACK = (By.ID, "add-to-cart-sauce-labs-backpack")
+    REMOVE_BACKPACK = (By.ID, "remove-sauce-labs-backpack")
 
     def __init__(self, driver):
-        self.driver = driver
-        # folosește timeout mai generos, rezolvă flakiness:
-        self.wait = WebDriverWait(driver, 30)
+        self.drv = driver
+
+    def open(self):
+        self.drv.get(self.URL)
 
     def loaded(self) -> bool:
-        # Pagina e considerată „loaded” când containerul de produse devine vizibil
-        self.wait.until(EC.visibility_of_element_located(self.INVENTORY_CONTAINER))
-        return True
+        try:
+            WebDriverWait(self.drv, 10).until(
+                EC.presence_of_element_located(self.INVENTORY_LIST)
+            )
+            return True
+        except Exception:
+            return False
 
     def add_backpack(self):
-        # click când butonul chiar e „clickable” (nu doar prezent)
-        self.wait.until(EC.element_to_be_clickable(self.ADD_BACKPACK_BTN)).click()
+        # click pe Add
+        WebDriverWait(self.drv, 10).until(
+            EC.element_to_be_clickable(self.ADD_BACKPACK)
+        ).click()
+
+        # așteptăm să apară butonul Remove (confirmă schimbarea stării)
+        WebDriverWait(self.drv, 10).until(
+            EC.presence_of_element_located(self.REMOVE_BACKPACK)
+        )
+
+        # așteptăm să se actualizeze badge-ul la 1
+        WebDriverWait(self.drv, 10).until(
+            EC.text_to_be_present_in_element(self.CART_BADGE, "1")
+        )
 
     def cart_count(self) -> int:
-        # după adăugare, insigna coșului trebuie să apară cu „1”
+        # citire robustă; dacă nu e badge, returnăm 0
         try:
-            badge = self.wait.until(EC.visibility_of_element_located(self.CART_BADGE))
-            return int(badge.text.strip())
+            el = WebDriverWait(self.drv, 3).until(
+                EC.presence_of_element_located(self.CART_BADGE)
+            )
+            txt = (el.text or "").strip()
+            return int(txt) if txt.isdigit() else 0
         except Exception:
             return 0
