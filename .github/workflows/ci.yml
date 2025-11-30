@@ -1,5 +1,5 @@
 ﻿name: CI
-on: [push, pull_request, workflow_dispatch]
+on: [push, pull_request]
 
 jobs:
   ui-tests:
@@ -11,12 +11,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Instalează Chrome pe runner (setează CHROME_PATH automat)
+      # Instalează Chrome pe runner
       - uses: browser-actions/setup-chrome@v1
+
+      # (opțional) cache pentru pip – builduri mai rapide
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - run: pip install -r requirements.txt
 
       - name: Run pytest (headless)
-        run: python -m pytest -q
         env:
           HEADLESS: "1"
+        run: python -m pytest -q
