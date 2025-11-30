@@ -1,4 +1,5 @@
 ﻿name: CI
+
 on: [push, pull_request]
 
 jobs:
@@ -6,12 +7,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      # Instalează Chrome pe runner (setează și CHROME_PATH automat)
+
+      # Instalează Chrome stabil (Selenium Manager va potrivi driverul)
       - uses: browser-actions/setup-chrome@v1
 
-      - run: pip install -r requirements.txt
+      - name: Install deps
+        run: pip install -r requirements.txt
+
       - name: Run pytest (headless)
+        env:
+          HEADLESS: "1"   # <<< forțează headless în confest.py
         run: python -m pytest -q
