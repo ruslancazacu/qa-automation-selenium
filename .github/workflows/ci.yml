@@ -1,0 +1,16 @@
+﻿name: CI
+on: [push, pull_request]
+jobs:
+  ui-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: browser-actions/setup-chrome@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Run pytest (headless)
+        run: python -m pytest -q
+        env:
+          CHROME_PATH: ${{ env.CHROME_PATH }}
