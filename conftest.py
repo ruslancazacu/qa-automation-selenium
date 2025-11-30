@@ -51,3 +51,56 @@ def driver(request):
     finally:
         drv.quit()
         shutil.rmtree(tmp_profile, ignore_errors=True)
+
+
+# -------------------------------
+# Artefacte + Allure pe eșec test
+# -------------------------------
+# (Allure e opțional local; în CI există via requirements)
+try:
+    import allure
+except Exception:
+    allure = None  # nu blocăm rularea dacă lipsește local
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """
+    La eșecul unui test care folosește fixture-ul `driver`,
+    salvăm screenshot + page source în folderul `artifacts/`
+    și, dacă există Allure, le atașăm în raport.
+    """
+    outcome = yield
+    rep = outcome.get_result()
+
+    if rep.when == "call" and rep.failed and "driver" in item.fixturenames:
+        drv = item.funcargs["driver"]
+        os.makedirs("artifacts", exist_ok=True)
+
+        # nume sigur de fișier (fără separatori speciali)
+        safe_name = item.nodeid.replace("::", "_").replace("/", "_").replace("\\", "_")
+        png_path = f"artifacts/{safe_name}.png"
+        html_path = f"artifacts/{safe_name}.html"
+
+        # scriem fișierele pe disc
+        try:
+            drv.save_screenshot(png_path)
+        except Exception:
+            png_path = None
+        try:
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(drv.page_source)
+        except Exception:
+            html_path = None
+
+        # atașăm în Allure, dacă e disponibil
+        if allure:
+            try:
+                if png_path and os.path.exists(png_path):
+                    allure.attach.file(png_path, name="screenshot",
+                                       attachment_type=allure.attachment_type.PNG)
+                if html_path and os.path.exists(html_path):
+                    allure.attach.file(html_path, name="page-source",
+                                       attachment_type=allure.attachment_type.HTML)
+            except Exception:
+                # nu stricăm testul dacă atașarea eșuează
+                pass
