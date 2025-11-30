@@ -1,12 +1,19 @@
 ﻿from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 class InventoryPage:
-    TITLE = (By.CSS_SELECTOR, ".app_logo")
-    INVENTORY_GRID = (By.ID, "inventory_container")
-
     def __init__(self, driver):
-        self.d = driver
+        self.driver = driver
+        self.wait = WebDriverWait(driver, 10)
 
-    def is_loaded(self):
-        return (self.d.find_element(*self.TITLE).is_displayed()
-                and self.d.find_element(*self.INVENTORY_GRID).is_displayed())
+    def is_open(self) -> bool:
+        """Ești logat dacă există lista de produse (inventory_list)."""
+        try:
+            self.wait.until(
+                EC.presence_of_element_located((By.CLASS_NAME, "inventory_list"))
+            )
+            return True
+        except TimeoutException:
+            return False

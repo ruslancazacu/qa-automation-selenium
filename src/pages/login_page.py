@@ -1,21 +1,35 @@
 ﻿from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 class LoginPage:
     URL = "https://www.saucedemo.com/"
-    USER = (By.ID, "user-name")
-    PASS = (By.ID, "password")
-    BTN  = (By.ID, "login-button")
-    ERROR = (By.CSS_SELECTOR, "[data-test='error']")
 
     def __init__(self, driver):
-        self.d = driver
+        self.driver = driver
+        self.wait = WebDriverWait(driver, 10)
 
     def open(self):
-        self.d.get(self.URL)
+        self.driver.get(self.URL)
+        # login button prezent -> pagina încărcată
+        self.wait.until(EC.visibility_of_element_located((By.ID, "login-button")))
 
     def login(self, username: str, password: str):
-        self.d.find_element(*self.USER).clear()
-        self.d.find_element(*self.USER).send_keys(username)
-        self.d.find_element(*self.PASS).clear()
-        self.d.find_element(*self.PASS).send_keys(password)
-        self.d.find_element(*self.BTN).click()
+        user = self.wait.until(EC.element_to_be_clickable((By.ID, "user-name")))
+        pwd  = self.wait.until(EC.element_to_be_clickable((By.ID, "password")))
+        btn  = self.wait.until(EC.element_to_be_clickable((By.ID, "login-button")))
+
+        user.clear(); user.send_keys(username)
+        pwd.clear();  pwd.send_keys(password)
+        btn.click()
+
+    def error_text(self, timeout: int = 6) -> str:
+        """Returnează textul de eroare de pe login (sau string gol dacă nu apare)."""
+        try:
+            el = WebDriverWait(self.driver, timeout).until(
+                EC.visibility_of_element_located((By.CSS_SELECTOR, '[data-test="error"]'))
+            )
+            return el.text.strip()
+        except TimeoutException:
+            return ""
