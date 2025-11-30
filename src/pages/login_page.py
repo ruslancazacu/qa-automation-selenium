@@ -1,45 +1,35 @@
-﻿# src/pages/login_page.py
-from selenium.webdriver.common.by import By
+﻿from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 class LoginPage:
     URL = "https://www.saucedemo.com/"
-
-    # locatori
     USERNAME = (By.ID, "user-name")
     PASSWORD = (By.ID, "password")
     SUBMIT   = (By.ID, "login-button")
-    ERROR    = (By.CSS_SELECTOR, "[data-test='error']")  # mesajul roșu
-    INVENTORY = (By.CSS_SELECTOR, ".inventory_list")     # după login reușit
+    ERROR    = (By.CSS_SELECTOR, "h3[data-test='error']")
+    INVENTORY_TITLE = (By.CSS_SELECTOR, ".title")
 
     def __init__(self, driver):
         self.driver = driver
-        # crește timpul de așteptare ca să fim stabili local
-        self.wait = WebDriverWait(driver, 20)
+        self.wait = WebDriverWait(driver, 30)  # 30s pentru stabilitate
 
     def open(self):
         self.driver.get(self.URL)
-        # câmpul user este vizibil = pagina e gata
-        self.wait.until(EC.visibility_of_element_located(self.USERNAME))
 
-    def login(self, username, password):
-        self.driver.find_element(*self.USERNAME).clear()
-        self.driver.find_element(*self.USERNAME).send_keys(username)
-        self.driver.find_element(*self.PASSWORD).clear()
-        self.driver.find_element(*self.PASSWORD).send_keys(password)
+    def login(self, user, pwd):
+        self.wait.until(EC.element_to_be_clickable(self.USERNAME)).send_keys(user)
+        self.driver.find_element(*self.PASSWORD).send_keys(pwd)
         self.driver.find_element(*self.SUBMIT).click()
 
-    # helperi pentru aserții
+    @property
     def inventory_loaded(self):
-        """True când lista de produse e prezentă după login valid."""
         try:
-            self.wait.until(EC.presence_of_element_located(self.INVENTORY))
+            self.wait.until(EC.visibility_of_element_located(self.INVENTORY_TITLE))
             return True
-        except Exception:
+        except:
             return False
 
     def error_text(self):
-        """Textul complet al mesajului de eroare după login greșit."""
         el = self.wait.until(EC.visibility_of_element_located(self.ERROR))
         return el.text

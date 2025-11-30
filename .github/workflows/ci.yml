@@ -1,6 +1,5 @@
 ﻿name: CI
-
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   ui-tests:
@@ -12,13 +11,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      # Instalează Chrome stabil (Selenium Manager va potrivi driverul)
+      # Instalează Chrome pe runner (setează CHROME_PATH automat)
       - uses: browser-actions/setup-chrome@v1
 
-      - name: Install deps
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt
 
       - name: Run pytest (headless)
-        env:
-          HEADLESS: "1"   # <<< forțează headless în confest.py
         run: python -m pytest -q
+        env:
+          HEADLESS: "1"

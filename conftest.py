@@ -1,5 +1,4 @@
-﻿# conftest.py
-import os, shutil, tempfile
+﻿import os, shutil, tempfile
 import pytest
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -7,12 +6,17 @@ from selenium.webdriver.chrome.options import Options
 @pytest.fixture(scope="session")
 def driver():
     opts = Options()
-    if os.getenv("HEADLESS") == "1":
+
+    # Headless doar în CI (sau dacă setezi manual HEADLESS=1)
+    if os.getenv("HEADLESS", "0") == "1":
         opts.add_argument("--headless=new")
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
-    drv = webdriver.Chrome(options=opts)  # Selenium Manager rezolvă driverul
+
+    # mic tuning pentru stabilitate
+    drv = webdriver.Chrome(options=opts)
     drv.set_window_size(1280, 900)
+    drv.implicitly_wait(2)
     try:
         yield drv
     finally:
