@@ -2,7 +2,6 @@
 import pytest
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 
 @pytest.fixture(scope="session")
 def driver():
@@ -10,10 +9,12 @@ def driver():
     opts.add_argument("--headless=new")
     opts.add_argument("--no-sandbox")
     opts.add_argument("--disable-dev-shm-usage")
-    chrome_path = os.environ.get("CHROME_PATH")
+    opts.add_argument("--window-size=1280,900")
+
+    chrome_path = os.getenv("CHROME_PATH")
     if chrome_path:
         opts.binary_location = chrome_path
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=opts)
-    driver.set_window_size(1280, 900)
+
+    driver = webdriver.Chrome(options=opts)
     yield driver
     driver.quit()
