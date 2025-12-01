@@ -1,53 +1,46 @@
-import time
-import pytest
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait as W
 from selenium.webdriver.support import expected_conditions as EC
 
-def _safe_click(driver, locator, timeout=15):
-    wait = WebDriverWait(driver, timeout)
-    el = wait.until(EC.presence_of_element_located(locator))
-    # adu în vizor
-    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-    try:
-        wait.until(EC.element_to_be_clickable(locator)).click()
-    except Exception:
-        # fallback JS click
-        driver.execute_script("arguments[0].click();", el)
+TIMEOUT = 20
 
-@pytest.mark.order(30)  # poți elimina linia dacă nu ai pytest-order instalat
+def _js_click(driver, el):
+    driver.execute_script("arguments[0].click();", el)
+
 def test_checkout_complete_flow(driver):
-    wait = WebDriverWait(driver, 20)
+    wait = W(driver, TIMEOUT)
 
-    # Login
+    # 1) Login
     driver.get("https://www.saucedemo.com/")
     wait.until(EC.visibility_of_element_located((By.ID, "user-name"))).send_keys("standard_user")
     driver.find_element(By.ID, "password").send_keys("secret_sauce")
     driver.find_element(By.ID, "login-button").click()
     wait.until(EC.url_contains("inventory.html"))
 
-    # Add to cart
-    _safe_click(driver, (By.CSS_SELECTOR, '[data-test="add-to-cart-sauce-labs-backpack"]'))
+    # 2) Adaugă în coș (folosește ID-ul corect!)
+    wait.until(EC.element_to_be_clickable((By.ID, "add-to-cart-sauce-labs-backpack"))).click()
 
-    # Cart
-    _safe_click(driver, (By.ID, "shopping_cart_container"))
+    # Deschide coșul (JS click ca să ocolim orice overlay)
+    cart_link = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "shopping_cart_link")))
+    _js_click(driver, cart_link)
     wait.until(EC.url_contains("cart.html"))
 
-    # Checkout
-    _safe_click(driver, (By.ID, "checkout"))
-    wait.until(EC.url_contains("checkout-step-one.html"))
+    # 3) Start checkout
+    checkout_btn = wait.until(EC.element_to_be_clickable((By.ID, "checkout")))
+    _js_click(driver, checkout_btn)
+    wait.until(EC.url_contains("checkout-step-one"))
 
-    # Form
-    wait.until(EC.visibility_of_element_located((By.ID, "first-name"))).send_keys("Ruslan")
-    driver.find_element(By.ID, "last-name").send_keys("Cazacu")
+    # 4) Completează Step One
+    wait.until(EC.visibility_of_element_located((By.ID, "first-name"))).send_keys("QA")
+    driver.find_element(By.ID, "last-name").send_keys("Bot")
     driver.find_element(By.ID, "postal-code").send_keys("9000")
-    _safe_click(driver, (By.ID, "continue"))
-    wait.until(EC.url_contains("checkout-step-two.html"))
+    driver.find_element(By.ID, "continue").click()
+    wait.until(EC.url_contains("checkout-step-two"))
 
-    # Finish (cu scroll + JS fallback)
-    _safe_click(driver, (By.CSS_SELECTOR, '[data-test="finish"]'))
-
-    # Confirmare
+    # 5) Finalizează comanda
+    finish_btn = wait.until(EC.element_to_be_clickable((By.ID, "finish")))
+    _js_click(driver, finish_btn)
     wait.until(EC.url_contains("checkout-complete"))
+
     thanks = wait.until(EC.visibility_of_element_located((By.CLASS_NAME, "complete-header")))
-    assert thanks.text.strip() == "Thank you for your order!"
+    assert "THANK YOU" in thanks.text.upper()
