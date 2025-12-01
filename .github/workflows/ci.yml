@@ -9,14 +9,16 @@ permissions:
   pages: write
   id-token: write
 
-# evită deploy-uri concurente pe GitHub Pages
+# evita publish-uri concurente pe GitHub Pages
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
   ui-tests:
+    name: ui-tests (${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -44,14 +46,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # asigură compatibilitatea cu pytest 8.x
+          python -m pip install -U pytest-rerunfailures
 
       - name: Run pytest (headless, parallel)
         env:
-          HEADLESS: "1"
+          HEADLESS: "1"           # folosit de conftest.py
+          E2E_TIMEOUT: "60"       # runner-ul din CI e mai lent
         run: |
-          pytest -q --alluredir=allure-results
+          python -m pytest -n auto --reruns 2 --reruns-delay 1 -q --alluredir=allure-results
 
-      # artefacte locale (screenshots / html la fail) – ignoră dacă nu există
       - name: Upload UI test artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -61,7 +65,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      # încărcăm un alluredir CU NUME UNIC per job → fără Conflict (409)
       - name: Upload Allure results
         if: always()
         uses: actions/upload-artifact@v4
@@ -75,13 +78,16 @@ jobs:
     name: Publish Allure report (gh-pages)
     runs-on: ubuntu-latest
     needs: ui-tests
+    if: ${{ always() }}                  # publică raportul chiar dacă testele au eșecuri
     timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # descarcă TOATE artefactele allure-results-* într-un singur folder
       - name: Download Allure results (merged)
         uses: actions/download-artifact@v4
         with:
@@ -89,14 +95,12 @@ jobs:
           path: merged-allure-results
           merge-multiple: true
 
-      # Java pentru Allure CLI
       - name: Setup Java (Temurin 17)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # Instalează Allure CLI (fără acțiune Docker)
       - name: Install Allure CLI
         run: |
           curl -sLo allure.zip https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/2.25.0/allure-commandline-2.25.0.zip
@@ -105,7 +109,7 @@ jobs:
 
       - name: Generate Allure report
         run: |
-          # dacă nu există rezultate, generează totuși un schelet (evită fail)
+          # dacă nu există rezultate, generează un schelet ca să nu pice pasul
           if [ ! -d "merged-allure-results" ] || [ -z "$(ls -A merged-allure-results || true)" ]; then
             mkdir -p merged-allure-results
           fi
@@ -118,4 +122,5 @@ jobs:
           path: allure-report
 
       - name: Deploy to GitHub Pages
+        id: deploy
         uses: actions/deploy-pages@v4
