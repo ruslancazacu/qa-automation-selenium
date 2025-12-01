@@ -20,13 +20,25 @@ def _chrome_options(tmp_profile: str) -> webdriver.ChromeOptions:
 
     # Dezactivează onboarding/autofill/manager parolă + leak warning (fără pop-up-uri)
     opts.add_argument(
-        "--disable-features=Translate,AutofillServerCommunication,"
-        "PasswordManagerOnboarding,SavePasswordBubble,OptInRlhOnboarding,"
-        "PasswordLeakDetection"
+        "--disable-features=" +
+        ",".join([
+            "Translate",
+            "AutofillServerCommunication",
+            "PasswordManagerOnboarding",
+            "SavePasswordBubble",
+            "OptInRlhOnboarding",
+            "PasswordLeakDetection",
+        ])
     )
     opts.add_argument("--disable-save-password-bubble")
     opts.add_argument("--password-store=basic")
     opts.add_argument("--use-mock-keychain")
+
+    # Alte blocări de UI care uneori apar în Chromium
+    opts.add_argument("--disable-notifications")
+    opts.add_argument("--disable-popup-blocking")
+    opts.add_argument("--disable-extensions")
+    opts.add_argument("--disable-infobars")
 
     # Elimină bannerul “Chrome is being controlled by automated test software”
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
@@ -38,13 +50,18 @@ def _chrome_options(tmp_profile: str) -> webdriver.ChromeOptions:
         "profile.password_manager_enabled": False,
         "autofill.profile_enabled": False,
         "autofill.credit_card_enabled": False,
+        # oprește cererile de notificări site
+        "profile.default_content_setting_values.notifications": 2,
     })
 
     # Profil Chrome temporar (unic per worker/proces)
     opts.add_argument(f"--user-data-dir={tmp_profile}")
 
-    # Strategie de încărcare (stabilă). Poți folosi "eager" dacă vrei mai rapid.
+    # Page load strategy implicită (stabilă)
     opts.page_load_strategy = "normal"
+
+    # Activăm logurile de consolă din browser (utile la debug)
+    opts.set_capability("goog:loggingPrefs", {"browser": "ALL"})
 
     return opts
 
@@ -64,8 +81,8 @@ def driver():
     opts = _chrome_options(tmp_profile)
     drv = webdriver.Chrome(options=opts)
 
-    # Folosim DOAR explicit waits în teste (mai robuste în CI)
-    # drv.implicitly_wait(2)  # opțional: comentează pentru a evita efecte secundare
+    # Timeouts & așteptări implicite
+    drv.implicitly_wait(2)
     drv.set_page_load_timeout(30)
     drv.set_script_timeout(30)
 
@@ -91,7 +108,7 @@ except Exception:
 def pytest_runtest_makereport(item, call):
     """
     La eșecul unui test care folosește fixture-ul `driver`,
-    salvăm screenshot + page source în `artifacts/`
+    salvăm screenshot + page source + console logs în `artifacts/`
     și, dacă există Allure, le atașăm în raport.
     """
     outcome = yield
@@ -107,6 +124,8 @@ def pytest_runtest_makereport(item, call):
     safe = item.nodeid.replace("::", "_").replace("/", "_").replace("\\", "_")
     png_path = os.path.join("artifacts", f"{safe}.png")
     html_path = os.path.join("artifacts", f"{safe}.html")
+    url_path = os.path.join("artifacts", f"{safe}.current-url.txt")
+    log_path = os.path.join("artifacts", f"{safe}.browser-console.log")
 
     # scriem fișierele pe disc
     try:
@@ -120,6 +139,24 @@ def pytest_runtest_makereport(item, call):
     except Exception:
         html_path = None
 
+    # URL curent
+    try:
+        with open(url_path, "w", encoding="utf-8") as fh:
+            fh.write(drv.current_url or "")
+    except Exception:
+        url_path = None
+
+    # Loguri de consolă din browser
+    try:
+        logs = []
+        for entry in drv.get_log("browser"):
+            # fiecare entry are level, message, timestamp
+            logs.append(f"[{entry.get('level')}] {entry.get('message')}")
+        with open(log_path, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(logs))
+    except Exception:
+        log_path = None
+
     # atașăm în Allure, dacă e disponibil
     if allure:
         try:
@@ -132,6 +169,16 @@ def pytest_runtest_makereport(item, call):
                 allure.attach.file(
                     html_path, name="page-source",
                     attachment_type=allure.attachment_type.HTML
+                )
+            if url_path and os.path.exists(url_path):
+                allure.attach.file(
+                    url_path, name="current-url",
+                    attachment_type=allure.attachment_type.TEXT
+                )
+            if log_path and os.path.exists(log_path):
+                allure.attach.file(
+                    log_path, name="browser-console",
+                    attachment_type=allure.attachment_type.TEXT
                 )
         except Exception:
             pass
