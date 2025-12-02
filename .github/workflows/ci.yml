@@ -48,12 +48,12 @@ jobs:
           pip install -r requirements.txt
           python -m pip install -U pytest-rerunfailures
 
-      - name: Run pytest (headless, parallel)
+      - name: Run pytest (headless, series)
         env:
           HEADLESS: "1"       # folosit de conftest.py
-          E2E_TIMEOUT: "60"   # runner-ul din CI e mai lent
+          E2E_TIMEOUT: "90"   # runner-ul din CI e mai lent -> mai generos
         run: |
-          python -m pytest -n auto --reruns 2 --reruns-delay 1 -q --alluredir=allure-results
+          python -m pytest -n 1 --reruns 2 --reruns-delay 1 --maxfail=1 -q --alluredir=allure-results
 
       - name: Upload UI test artifacts
         if: always()
