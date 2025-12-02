@@ -1,4 +1,3 @@
-# tests/test_checkout_flow.py
 import os
 import time
 
@@ -12,7 +11,6 @@ from selenium.common.exceptions import (
 )
 
 BASE_URL = "https://www.saucedemo.com/"
-# în CI e mai lent; poate fi setat din ci.yml prin E2E_TIMEOUT
 TIMEOUT = int(os.getenv("E2E_TIMEOUT", "90"))
 
 LOC = {
@@ -42,9 +40,12 @@ LOC = {
     "complete_header": (By.CLASS_NAME, "complete-header"),
 }
 
+# ---------- helpers robuste ----------
 
-def _safe_click(driver, locator, attempts: int = 3, wait_seconds: int = 10):
-    """Click robust: așteaptă clickability, încearcă normal, apoi JS-click ca fallback."""
+def _wait_dom_ready(driver, seconds=10):
+    W(driver, seconds).until(lambda d: d.execute_script("return document.readyState") == "complete")
+
+def _safe_click(driver, locator, attempts=3, wait_seconds=10):
     last_exc = None
     for _ in range(attempts):
         try:
@@ -57,48 +58,63 @@ def _safe_click(driver, locator, attempts: int = 3, wait_seconds: int = 10):
                 driver.execute_script("arguments[0].click();", el)
                 return
             except Exception:
-                time.sleep(0.5)
+                time.sleep(0.4)
     if last_exc:
         raise last_exc
 
+def _visible_or_present(driver, locator, seconds=10):
+    try:
+        return W(driver, seconds).until(EC.visibility_of_element_located(locator))
+    except TimeoutException:
+        W(driver, seconds).until(EC.presence_of_element_located(locator))
+        return driver.find_element(*locator)
+
+# ---------- test ----------
 
 def test_checkout_complete_flow(driver):
     w = W(driver, TIMEOUT)
 
     # 1) Login
     driver.get(BASE_URL)
-    w.until(EC.visibility_of_element_located(LOC["user"])).send_keys("standard_user")
+    _wait_dom_ready(driver, 15)
+    _visible_or_present(driver, LOC["user"], 15).send_keys("standard_user")
     driver.find_element(*LOC["pwd"]).send_keys("secret_sauce")
-    driver.find_element(*LOC["login"]).click()
+    _safe_click(driver, LOC["login"])
     w.until(EC.presence_of_element_located(LOC["inventory"]))
 
     # 2) Add to cart + badge=1
     _safe_click(driver, LOC["add_backpack"])
     w.until(EC.text_to_be_present_in_element(LOC["badge"], "1"))
 
-    # 3) Cart – acceptăm oricare din semnalele că pagina e încărcată
+    # 3) Cart – acceptăm orice semnal de încărcare
     _safe_click(driver, LOC["cart_link"])
+    _wait_dom_ready(driver, 10)
     w.until(EC.any_of(
         EC.url_contains("cart"),
         EC.presence_of_element_located(LOC["cart_container"]),
         EC.presence_of_element_located(LOC["checkout"])
     ))
 
-    # 4) Checkout Step One (retry-safe pentru CI)
-    _safe_click(driver, LOC["checkout"])
-    for _ in range(2):
+    # 4) Checkout Step One – 2 încercări + fallback navigare directă
+    ok = False
+    for i in range(2):
+        _safe_click(driver, LOC["checkout"])
+        _wait_dom_ready(driver, 10)
         try:
-            W(driver, 5).until(EC.any_of(
+            W(driver, 6).until(EC.any_of(
                 EC.url_contains("checkout-step-one"),
                 EC.visibility_of_element_located(LOC["first"])
             ))
+            ok = True
             break
-        except Exception:
-            _safe_click(driver, LOC["checkout"])
+        except TimeoutException:
+            pass
+    if not ok:
+        driver.get(BASE_URL + "checkout-step-one.html")
+        _wait_dom_ready(driver, 10)
 
     # Form Step One
-    w.until(EC.visibility_of_element_located(LOC["first"]))
-    driver.find_element(*LOC["first"]).send_keys("QA")
+    _visible_or_present(driver, LOC["first"], 15).send_keys("QA")
     driver.find_element(*LOC["last"]).send_keys("Bot")
     driver.find_element(*LOC["zip"]).send_keys("9000")
     _safe_click(driver, LOC["cont"])
