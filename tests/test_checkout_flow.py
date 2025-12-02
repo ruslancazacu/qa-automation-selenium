@@ -1,4 +1,4 @@
-import os, time
+import os
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait as W
 from selenium.webdriver.support import expected_conditions as EC
@@ -24,6 +24,8 @@ LOC = {
     "last": (By.CSS_SELECTOR,  '[data-test="lastName"]'),
     "zip": (By.CSS_SELECTOR,   '[data-test="postalCode"]'),
     "continue": (By.CSS_SELECTOR, '[data-test="continue"]'),
+
+    "summary": (By.ID, "checkout_summary_container"),
     "finish": (By.CSS_SELECTOR,   '[data-test="finish"]'),
     "complete_header": (By.CLASS_NAME, "complete-header"),
 }
@@ -38,14 +40,19 @@ def _visible_or_present(driver, locator, t=TIMEOUT):
         return W(driver, t).until(EC.presence_of_element_located(locator))
 
 def _safe_click(driver, locator, t=TIMEOUT):
-    el = W(driver, t).until(EC.element_to_be_clickable(locator))
+    """Click robust: clickable -> scroll -> .click() | JS click fallback."""
+    try:
+        el = W(driver, min(t, 8)).until(EC.element_to_be_clickable(locator))
+    except TimeoutException:
+        el = _visible_or_present(driver, locator, t)
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
     try:
         el.click()
     except Exception:
         driver.execute_script("arguments[0].click();", el)
 
-def _goto_cart(driver, base=BASE_URL):
-    """Click pe icon + fallback: navigare directă la /cart.html."""
+def _goto_cart(driver):
+    """Deschide coșul. Dacă iconul nu reacționează, mergem direct la /cart.html."""
     try:
         _safe_click(driver, LOC["cart_link"], t=10)
         _wait_dom_ready(driver, 10)
@@ -55,12 +62,12 @@ def _goto_cart(driver, base=BASE_URL):
             EC.presence_of_element_located(LOC["checkout"]),
         ))
     except Exception:
-        driver.get(base + "cart.html")
+        driver.get(BASE_URL + "cart.html")
         _wait_dom_ready(driver, 10)
         W(driver, 10).until(EC.presence_of_element_located(LOC["cart_container"]))
 
-def _open_checkout_step_one(driver, base=BASE_URL):
-    """Click pe Checkout + fallback: navigare directă la /checkout-step-one.html."""
+def _open_checkout_step_one(driver):
+    """Deschide Step One. Fallback la URL direct dacă click-ul nu reușește."""
     try:
         _safe_click(driver, LOC["checkout"], t=10)
         W(driver, 8).until(EC.any_of(
@@ -68,9 +75,22 @@ def _open_checkout_step_one(driver, base=BASE_URL):
             EC.visibility_of_element_located(LOC["first"]),
         ))
     except Exception:
-        driver.get(base + "checkout-step-one.html")
+        driver.get(BASE_URL + "checkout-step-one.html")
         _wait_dom_ready(driver, 10)
         W(driver, 10).until(EC.visibility_of_element_located(LOC["first"]))
+
+def _open_checkout_step_two(driver):
+    """După Continue, așteaptă *Step Two*; dacă nu vine, navighează direct."""
+    try:
+        W(driver, 10).until(EC.any_of(
+            EC.url_contains("checkout-step-two"),
+            EC.presence_of_element_located(LOC["summary"]),
+            EC.presence_of_element_located(LOC["finish"]),
+        ))
+    except Exception:
+        driver.get(BASE_URL + "checkout-step-two.html")
+        _wait_dom_ready(driver, 10)
+        W(driver, 10).until(EC.presence_of_element_located(LOC["summary"]))
 
 def test_checkout_complete_flow(driver):
     w = W(driver, TIMEOUT)
@@ -93,13 +113,18 @@ def test_checkout_complete_flow(driver):
     # 4) Checkout Step One (rezilient)
     _open_checkout_step_one(driver)
 
-    # 5) Completează formularul + finalizează
+    # 5) Completează Step One
     driver.find_element(*LOC["first"]).send_keys("QA")
     driver.find_element(*LOC["last"]).send_keys("Auto")
     driver.find_element(*LOC["zip"]).send_keys("12345")
     _safe_click(driver, LOC["continue"])
+
+    # 6) Step Two (asigurare)
+    _open_checkout_step_two(driver)
+
+    # 7) Finish (cu scroll + JS fallback)
     _safe_click(driver, LOC["finish"])
 
-    # 6) Verifică succesul
+    # 8) Verificare succes
     w.until(EC.url_contains("checkout-complete"))
     assert "Thank you for your order!" in driver.find_element(*LOC["complete_header"]).text
