@@ -27,7 +27,6 @@ LOC = {
 }
 
 def _safe_click(drv, locator, attempts: int = 3):
-    """Click cu wait + scroll + fallback JS (fiabil în headless/CI)."""
     w = W(drv, TIMEOUT)
     last = None
     for _ in range(attempts):
@@ -46,7 +45,7 @@ def _safe_click(drv, locator, attempts: int = 3):
                 return
             except Exception as e2:
                 last = e2
-                time.sleep(0.3)
+                time.sleep(0.25)
     raise last if last else RuntimeError("safe_click failed")
 
 def test_checkout_complete_flow(driver):
@@ -63,11 +62,15 @@ def test_checkout_complete_flow(driver):
     _safe_click(driver, LOC["add_backpack"])
     w.until(EC.text_to_be_present_in_element(LOC["badge"], "1"))
 
-    # 3) Cart – așteptăm elementul paginii, NU URL-ul
+    # 3) Cart – acceptăm ORICARE din trei semnale că pagina s-a încărcat
     _safe_click(driver, LOC["cart_link"])
-    w.until(EC.presence_of_element_located(LOC["cart_container"]))
+    w.until(EC.any_of(
+        EC.url_contains("cart"),
+        EC.presence_of_element_located(LOC["cart_container"]),
+        EC.presence_of_element_located(LOC["checkout"])
+    ))
 
-    # 4) Checkout Step One – click robust, apoi firstName vizibil
+    # 4) Checkout Step One
     _safe_click(driver, LOC["checkout"])
     w.until(EC.visibility_of_element_located(LOC["first"]))
     driver.find_element(*LOC["first"]).send_keys("QA")
@@ -75,6 +78,6 @@ def test_checkout_complete_flow(driver):
     driver.find_element(*LOC["zip"]).send_keys("9000")
     _safe_click(driver, LOC["cont"])
 
-    # 5) Finish + verificare succes
+    # 5) Finish + confirmare succes
     _safe_click(driver, LOC["finish"])
     w.until(EC.visibility_of_element_located(LOC["done"]))
