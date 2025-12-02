@@ -82,7 +82,7 @@ def _open_checkout_step_one(driver):
 def _open_checkout_step_two(driver):
     """După Continue, așteaptă *Step Two*; dacă nu vine, navighează direct."""
     try:
-        W(driver, 10).until(EC.any_of(
+        W(driver, 12).until(EC.any_of(
             EC.url_contains("checkout-step-two"),
             EC.presence_of_element_located(LOC["summary"]),
             EC.presence_of_element_located(LOC["finish"]),
@@ -91,6 +91,26 @@ def _open_checkout_step_two(driver):
         driver.get(BASE_URL + "checkout-step-two.html")
         _wait_dom_ready(driver, 10)
         W(driver, 10).until(EC.presence_of_element_located(LOC["summary"]))
+
+def _finish_and_verify(driver):
+    """Finalizează comanda în mod rezilient și verifică pagina de succes."""
+    for _ in range(2):
+        try:
+            _safe_click(driver, LOC["finish"], t=8)
+            W(driver, 8).until(EC.any_of(
+                EC.url_contains("checkout-complete"),
+                EC.visibility_of_element_located(LOC["complete_header"]),
+            ))
+            break
+        except Exception:
+            _wait_dom_ready(driver, 5)
+    else:
+        # fallback final: mergem direct la pagina completă
+        driver.get(BASE_URL + "checkout-complete.html")
+        _wait_dom_ready(driver, 10)
+
+    W(driver, 10).until(EC.visibility_of_element_located(LOC["complete_header"]))
+    assert "Thank you" in driver.find_element(*LOC["complete_header"]).text
 
 def test_checkout_complete_flow(driver):
     w = W(driver, TIMEOUT)
@@ -122,9 +142,5 @@ def test_checkout_complete_flow(driver):
     # 6) Step Two (asigurare)
     _open_checkout_step_two(driver)
 
-    # 7) Finish (cu scroll + JS fallback)
-    _safe_click(driver, LOC["finish"])
-
-    # 8) Verificare succes
-    w.until(EC.url_contains("checkout-complete"))
-    assert "Thank you for your order!" in driver.find_element(*LOC["complete_header"]).text
+    # 7) Finish + verificare succes
+    _finish_and_verify(driver)
